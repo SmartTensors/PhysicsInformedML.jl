@@ -5,7 +5,7 @@ import NMFk
 import NTFk
 import Mads
 
-function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractMatrix, times; plot::Bool=false, trainingrange=[0., 0.05, 0.1, 0.2, 0.33], epsilon = .000000001, gamma = 0.1, nc = 10)
+function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractMatrix, times; plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10)
 	for r in trainingrange
 		Xe = copy(Xo)
 		for i = 1:length(times)
