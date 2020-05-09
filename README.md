@@ -1,1 +1,1 @@
-# PIML.jl
+# PhysicsInformedML.jl

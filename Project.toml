@@ -1,4 +1,4 @@
-name = "PIML"
+name = "PhysicsInformedML"
 uuid = "ddcc5653-dcaa-48f1-be98-eb2dafe13740"
 authors = ["monty <velimir.vesselinov@gmail.com>"]
 version = "0.1.0"
