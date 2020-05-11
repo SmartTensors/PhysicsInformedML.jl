@@ -4,15 +4,39 @@ import SVR
 import NMFk
 import NTFk
 import Mads
+import Suppressor
 
-function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10)
+function sensitivity(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; kw...)
+	mask = trues(size(Xdn, 3))
+	local vcountt
+	local vcountp
+	local or2t
+	local or2p
+	@Suppressor.suppress vcountt, vcountp, or2t, or2p = piml(Xo, Xin, Xsn, Xdn, times, keepcases; kw...)
+	for i = 1:size(Xdn, 3)
+		mask[i] = false
+		local vr2t
+		local vr2p
+		@Suppressor.suppress vcountt, vcountp, vr2t, vr2p = piml(Xo, Xin, Xsn, Xdn, times, keepcases; mask=mask, kw...)
+		mask[i] = true
+		te = sum(abs.(or2t .- vr2t))
+		pe = sum(abs.(or2p .- vr2p))
+		@info "$(attributes[i]): $te : $pe"
+	end
+end
+
+function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+	vcountt = Vector{Int64}(undef, 0)
+	vcountp = Vector{Int64}(undef, 0)
+	vr2t = Vector{Float64}(undef, 0)
+	vr2p = Vector{Float64}(undef, 0)
 	for r in trainingrange
 		Xe = copy(Xo)
 		for i = 1:length(times)
 			is = sortperm(Xo[:,i])
 			# T = Xin[is,:]
 			# T = Xsn[is,:]
-			T = Xdn[i,is,:]
+			T = Xdn[i,is,mask]
 			# T = [Xin[is,:] Xsn[is,:]]
 			# T = [Xin[is,:] Xsn[is,:] Xdn[i,is,:]]
 			# T = reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))
@@ -60,8 +84,13 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 				end
 			end
 			println(countt / nc, " ", countp / nc, " ", times[i], " ", r2t / nc, " ", r2p / nc, " ")
+			push!(vcountt, countt / nc)
+			push!(vcountp, countp / nc)
+			push!(vr2t, r2t / nc)
+			push!(vr2p, r2p / nc)
 		end
 	end
+	return vcountt, vcountp, vr2t, vr2p
 end
 
 end
