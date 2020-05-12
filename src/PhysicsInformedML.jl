@@ -19,9 +19,12 @@ function sensitivity(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatri
 		local vr2p
 		@Suppressor.suppress vcountt, vcountp, vr2t, vr2p = piml(Xo, Xin, Xsn, Xdn, times, keepcases; mask=mask, kw...)
 		mask[i] = true
-		te = sum(abs.(or2t .- vr2t))
-		pe = sum(abs.(or2p .- vr2p))
+		ta = abs.(or2t .- vr2t)
+		pa = abs.(or2p .- vr2p)
+		te = sum(ta)
+		pe = sum(pa)
 		@info "$(attributes[i]): $te : $pe"
+		display([ta pa])
 	end
 end
 
