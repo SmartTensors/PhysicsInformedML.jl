@@ -6,45 +6,76 @@ import NTFk
 import Mads
 import Suppressor
 
-function sensitivity(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; kw...)
-	mask = trues(size(Xdn, 3))
+function sensitivity(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; control::String="d", kw...)
+	if control == "i"
+		sz = size(Xin, 2)
+	elseif control == "s"
+		sz = size(Xsn, 2)
+	elseif control == "d"
+		sz = size(Xdn, 3)
+	elseif control == "a"
+		sz = size(Xdn, 3)
+	else
+		@warn "Unknown $control! Failed!"
+		return nothing
+	end
+	@assert sz == length(attributes)
+	mask = trues(sz)
 	local vcountt
 	local vcountp
 	local or2t
 	local or2p
-	@Suppressor.suppress vcountt, vcountp, or2t, or2p = piml(Xo, Xin, Xsn, Xdn, times, keepcases; kw...)
-	for i = 1:size(Xdn, 3)
+	@Suppressor.suppress vcountt, vcountp, or2t, or2p = piml(Xo, Xin, Xsn, Xdn, times, keepcases; control=control, kw...)
+	for i = 1:sz
 		mask[i] = false
 		local vr2t
 		local vr2p
-		@Suppressor.suppress vcountt, vcountp, vr2t, vr2p = piml(Xo, Xin, Xsn, Xdn, times, keepcases; mask=mask, kw...)
+		@Suppressor.suppress vcountt, vcountp, vr2t, vr2p = piml(Xo, Xin, Xsn, Xdn, times, keepcases; control=control, mask=mask, kw...)
 		mask[i] = true
 		ta = abs.(or2t .- vr2t)
 		pa = abs.(or2p .- vr2p)
 		te = sum(ta)
 		pe = sum(pa)
 		@info "$(attributes[i]): $te : $pe"
-		display([ta pa])
+		# display([ta pa])
 	end
 end
 
-function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+	ntimes = length(times)
+	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
 	vcountp = Vector{Int64}(undef, 0)
 	vr2t = Vector{Float64}(undef, 0)
 	vr2p = Vector{Float64}(undef, 0)
 	for r in trainingrange
 		Xe = copy(Xo)
-		for i = 1:length(times)
+		for i = 1:ntimes
 			is = sortperm(Xo[:,i])
-			# T = Xin[is,:]
-			# T = Xsn[is,:]
-			T = Xdn[i,is,mask]
-			# T = [Xin[is,:] Xsn[is,:]]
-			# T = [Xin[is,:] Xsn[is,:] Xdn[i,is,:]]
-			# T = reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))
-			# T = [Xin[is,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))]
-			# T = [Xin[is,:] Xsn[is,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))]
+			if control == "i"
+				T = Xin[is,mask]
+			elseif control == "s"
+				T = Xsn[is,mask]
+			elseif control == "d"
+				T = Xdn[i,is,mask]
+			elseif control == "a"
+				T = reshape(permutedims(Xdn[:,:,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,:,mask], 3)))[is,:]
+			elseif control == "is"
+				T = [Xin[is,:] Xsn[is,:]]
+			elseif control == "id"
+				T = [Xin[is,:] Xdn[i,is,:]]
+			elseif control == "isd"
+				T = [Xin[is,:] Xsn[is,:] Xdn[i,is,:]]
+			elseif control == "ia"
+				T = [Xin[is,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[is,:]]
+			elseif control == "sa"
+				T = [Xsn[is,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[is,:]]
+			elseif control == "isa"
+				T = [Xin[is,:] Xsn[is,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[is,:]]
+			else
+				@warn "Unknown $control! Failed!"
+				return nothing
+			end
 			Xen, _, _ = NMFk.normalize!(Xe; amin=0)
 			if i > 1
 				# T = [T Xon[is,1:i-1]]
