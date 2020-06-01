@@ -134,6 +134,8 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 	vcountp = Vector{Int64}(undef, 0)
 	vr2t = Vector{Float64}(undef, 0)
 	vr2p = Vector{Float64}(undef, 0)
+	vr2tt = Vector{Float64}(undef, length(times))
+	vr2tp = Vector{Float64}(undef, length(times))
 	for r in trainingrange
 		if control == "i"
 			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes)]
@@ -156,6 +158,8 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 		local r2t = 0
 		local r2p = 0
 		local pm
+		vr2tt .= 0
+		vr2tp .= 0
 		vy_tr = vec(Xo[:,1:ttimes])
 		for k = 1:nc
 			pm = SVR.get_prediction_mask(ncases, r; keepcases=keepcases)
@@ -173,22 +177,27 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 			if sum(pm) > 0
 				r2 = SVR.r2(vy_tr[lpm], vy_pr[lpm])
 				r2p += r2
+				plot && NMFk.plotscatter(vy_tr[lpm], vy_pr[lpm]; title="Prediction Size: $(sum(lpm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+			end
+			y_pr = reshape(vy_pr, ncases, ttimes)
+			for i = 1:length(times)
+				r2tt = SVR.r2(Xo[.!pm,i], y_pr[.!pm,i])
+				vr2tt[i] += r2tt
 				if plot
-					NMFk.plotscatter(vy_tr[lpm], vy_pr[lpm]; title="Prediction Size: $(sum(lpm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
-					y_pr = reshape(vy_pr, ncases, ttimes)
-					for i = 1:length(times)
-						r2 = SVR.r2(Xo[.!pm,i], y_pr[.!pm,i])
-						Mads.plotseries([Xo[:,i] y_pr[:,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
-						NMFk.plotscatter(Xo[.!pm,i], y_pr[.!pm,i]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2; sigdigits=2))")
-						if sum(pm) > 0
-							r2 = SVR.r2(Xo[pm,i], y_pr[pm,i])
-							NMFk.plotscatter(Xo[pm,i], y_pr[pm,i]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
-						end
-					end
+					Mads.plotseries([Xo[:,i] y_pr[:,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
+					NMFk.plotscatter(Xo[.!pm,i], y_pr[.!pm,i]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2tt; sigdigits=2))")
+				end
+				if sum(pm) > 0
+					r2tp = SVR.r2(Xo[pm,i], y_pr[pm,i])
+					vr2tp[i] += r2tp
+					plot && NMFk.plotscatter(Xo[pm,i], y_pr[pm,i]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2tp; sigdigits=2))")
 				end
 			end
 		end
-		println(r, " ", countt / nc / ttimes, " ", countp / nc / ttimes, " ", r2t / nc, " ", r2p / nc, " ")
+		println(r, " ", countt / nc, " ", countp / nc, " ", r2t / nc, " ", r2p / nc, " ")
+		for i = 1:length(times)
+			println(times[i], " ", vr2tt[i] / nc, " ", vr2tp[i] / nc)
+		end
 		push!(vcountt, countt / nc)
 		push!(vcountp, countp / nc)
 		push!(vr2t, r2t / nc)
