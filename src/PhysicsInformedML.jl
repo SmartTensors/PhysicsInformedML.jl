@@ -117,12 +117,82 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 					NMFk.plotscatter(Xo[is,i][pm], Xe[is,i][pm]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 				end
 			end
-			println(countt / nc, " ", countp / nc, " ", times[i], " ", r2t / nc, " ", r2p / nc, " ")
+			println(r, " ", countt / nc, " ", countp / nc, " ", times[i], " ", r2t / nc, " ", r2p / nc, " ")
 			push!(vcountt, countt / nc)
 			push!(vcountp, countp / nc)
 			push!(vr2t, r2t / nc)
 			push!(vr2p, r2p / nc)
 		end
+	end
+	return vcountt, vcountp, vr2t, vr2p
+end
+
+function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+	ttimes = length(times)
+	ncases = size(Xin, 1)
+	vcountt = Vector{Int64}(undef, 0)
+	vcountp = Vector{Int64}(undef, 0)
+	vr2t = Vector{Float64}(undef, 0)
+	vr2p = Vector{Float64}(undef, 0)
+	for r in trainingrange
+		if control == "i"
+			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes)]
+		elseif control == "s"
+			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xsn[:,mask], ttimes)]
+		elseif control == "d"
+			T = [repeat(times[1:ttimes]; inner=ncases) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ttimes * ncases, size(Xdn[:,:,mask], 3)))]
+		elseif control == "is"
+			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes) repeat(Xsn[:,mask], ttimes)]
+		elseif control == "id"
+			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ttimes * ncases), size(Xdn[:,:,mask], 3))]
+		elseif control == "isd"
+			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes) repeat(Xsn[:,mask], ttimes) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ttimes * ncases), size(Xdn[:,:,mask], 3))]
+		else
+			@warn "Unknown $control! Failed!"
+			return nothing
+		end
+		local countt = 0
+		local countp = 0
+		local r2t = 0
+		local r2p = 0
+		local pm
+		vy_tr = vec(Xo[:,1:ttimes])
+		for k = 1:nc
+			pm = SVR.get_prediction_mask(ncases, r; keepcases=keepcases)
+			lpm = repeat(pm, ttimes)
+			vy_pr, lpm = SVR.fit_test(vy_tr, permutedims(T), r; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, pm=repeat(pm, ttimes))
+			vy_pr[vy_pr .< 0] .= 0
+			countt += sum(.!pm)
+			countp += sum(pm)
+			r2 = SVR.r2(vy_tr[.!lpm], vy_pr[.!lpm])
+			r2t += r2
+			if plot
+				Mads.plotseries([vy_tr vy_pr]; xmin=1, xmax=length(vy_pr), logy=false, names=["Truth", "Prediction"])
+				NMFk.plotscatter(vy_tr[.!lpm], vy_pr[.!lpm]; title="Training Size: $(sum(.!lpm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+			end
+			if sum(pm) > 0
+				r2 = SVR.r2(vy_tr[lpm], vy_pr[lpm])
+				r2p += r2
+				if plot
+					NMFk.plotscatter(vy_tr[lpm], vy_pr[lpm]; title="Prediction Size: $(sum(lpm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+					y_pr = reshape(vy_pr, ncases, ttimes)
+					for i = 1:length(times)
+						r2 = SVR.r2(Xo[.!pm,i], y_pr[.!pm,i])
+						Mads.plotseries([Xo[:,i] y_pr[:,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
+						NMFk.plotscatter(Xo[.!pm,i], y_pr[.!pm,i]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+						if sum(pm) > 0
+							r2 = SVR.r2(Xo[pm,i], y_pr[pm,i])
+							NMFk.plotscatter(Xo[pm,i], y_pr[pm,i]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+						end
+					end
+				end
+			end
+		end
+		println(r, " ", countt / nc / ttimes, " ", countp / nc / ttimes, " ", r2t / nc, " ", r2p / nc, " ")
+		push!(vcountt, countt / nc)
+		push!(vcountp, countp / nc)
+		push!(vr2t, r2t / nc)
+		push!(vr2p, r2p / nc)
 	end
 	return vcountt, vcountp, vr2t, vr2p
 end
