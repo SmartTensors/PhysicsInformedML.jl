@@ -41,7 +41,7 @@ function sensitivity(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatri
 	end
 end
 
-function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::UnitRange{Int64}=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
@@ -64,6 +64,8 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 				T = [Xin[is,:] Xsn[is,:]]
 			elseif control == "id"
 				T = [Xin[is,:] Xdn[i,is,:]]
+			elseif control == "sd"
+				T = [Xsn[is,:] Xdn[i,is,:]]
 			elseif control == "isd"
 				T = [Xin[is,:] Xsn[is,:] Xdn[i,is,:]]
 			elseif control == "ia"
@@ -73,7 +75,7 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 			elseif control == "isa"
 				T = [Xin[is,:] Xsn[is,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[is,:]]
 			else
-				@warn "Unknown $control! Failed!"
+				@warn "Unknown $control Failed!"
 				return nothing
 			end
 			Xen, _, _ = NMFk.normalize!(Xe; amin=0)
@@ -87,8 +89,9 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 			local r2t = 0
 			local r2p = 0
 			local pm
+			tr = i in ptimes ? r : 0
 			for k = 1:nc
-				y_pr, pm = SVR.fit_test(Xo[is,i], permutedims(T), r; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, keepcases=keepcases[is])
+				y_pr, pm = SVR.fit_test(Xo[is,i], permutedims(T), tr; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, keepcases=keepcases[is])
 				y_pr[y_pr .< 0] .= 0
 				countt += sum(.!pm)
 				countp += sum(pm)
@@ -127,8 +130,8 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 	return vcountt, vcountp, vr2t, vr2p
 end
 
-function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
-	ttimes = length(times)
+function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::UnitRange{Int64}=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
 	vcountp = Vector{Int64}(undef, 0)
@@ -138,19 +141,21 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 	vr2tp = Vector{Float64}(undef, length(times))
 	for r in trainingrange
 		if control == "i"
-			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes)]
+			T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[:,mask], ntimes)]
 		elseif control == "s"
-			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xsn[:,mask], ttimes)]
+			T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xsn[:,mask], ntimes)]
 		elseif control == "d"
-			T = [repeat(times[1:ttimes]; inner=ncases) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ttimes * ncases, size(Xdn[:,:,mask], 3)))]
+			T = [repeat(times[1:ntimes]; inner=ncases) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ntimes * ncases, size(Xdn[:,:,mask], 3)))]
 		elseif control == "is"
-			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes) repeat(Xsn[:,mask], ttimes)]
+			T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[:,mask], ntimes) repeat(Xsn[:,mask], ntimes)]
 		elseif control == "id"
-			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ttimes * ncases), size(Xdn[:,:,mask], 3))]
+			T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[:,mask], ntimes) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,:,mask], 3))]
+		elseif control == "sd"
+			T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xsn[:,mask], ntimes) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,:,mask], 3))]
 		elseif control == "isd"
-			T = [repeat(times[1:ttimes]; inner=ncases) repeat(Xin[:,mask], ttimes) repeat(Xsn[:,mask], ttimes) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ttimes * ncases), size(Xdn[:,:,mask], 3))]
+			T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[:,mask], ntimes) repeat(Xsn[:,mask], ntimes) reshape(permutedims(Xdn[:,:,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,:,mask], 3))]
 		else
-			@warn "Unknown $control! Failed!"
+			@warn "Unknown $control Failed!"
 			return nothing
 		end
 		local countt = 0
@@ -160,11 +165,18 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 		local pm
 		vr2tt .= 0
 		vr2tp .= 0
-		vy_tr = vec(Xo[:,1:ttimes])
+		vy_tr = vec(Xo[:,1:ntimes])
 		for k = 1:nc
 			pm = SVR.get_prediction_mask(ncases, r; keepcases=keepcases)
-			lpm = repeat(pm, ttimes)
-			vy_pr, lpm = SVR.fit_test(vy_tr, permutedims(T), r; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, pm=repeat(pm, ttimes))
+			lpm = Vector{Bool}(undef, 0)
+			for i = 1:length(times)
+				if i in ptimes
+					lpm = vcat(lpm, pm)
+				else
+					lpm = vcat(lpm, falses(length(pm)))
+				end
+			end
+			vy_pr, lpm = SVR.fit_test(vy_tr, permutedims(T), r; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, pm=lpm)
 			vy_pr[vy_pr .< 0] .= 0
 			countt += sum(.!pm)
 			countp += sum(pm)
@@ -179,24 +191,25 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 				r2p += r2
 				plot && NMFk.plotscatter(vy_tr[lpm], vy_pr[lpm]; title="Prediction Size: $(sum(lpm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 			end
-			y_pr = reshape(vy_pr, ncases, ttimes)
+			y_pr = reshape(vy_pr, ncases, ntimes)
 			for i = 1:length(times)
-				r2tt = SVR.r2(Xo[.!pm,i], y_pr[.!pm,i])
+				opm = i in ptimes ? pm : falses(length(pm))
+				r2tt = SVR.r2(Xo[.!opm,i], y_pr[.!opm,i])
 				vr2tt[i] += r2tt
 				if plot
 					Mads.plotseries([Xo[:,i] y_pr[:,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
-					NMFk.plotscatter(Xo[.!pm,i], y_pr[.!pm,i]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2tt; sigdigits=2))")
+					NMFk.plotscatter(Xo[.!opm,i], y_pr[.!opm,i]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2tt; sigdigits=2))")
 				end
-				if sum(pm) > 0
-					r2tp = SVR.r2(Xo[pm,i], y_pr[pm,i])
+				if sum(opm) > 0
+					r2tp = SVR.r2(Xo[opm,i], y_pr[opm,i])
 					vr2tp[i] += r2tp
-					plot && NMFk.plotscatter(Xo[pm,i], y_pr[pm,i]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2tp; sigdigits=2))")
+					plot && NMFk.plotscatter(Xo[opm,i], y_pr[opm,i]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2tp; sigdigits=2))")
 				end
 			end
 		end
 		println(r, " ", countt / nc, " ", countp / nc, " ", r2t / nc, " ", r2p / nc, " ")
 		for i = 1:length(times)
-			println(times[i], " ", vr2tt[i] / nc, " ", vr2tp[i] / nc)
+			!(i in ptimes) && println(times[i], " ", vr2tt[i] / nc, " ", vr2tp[i] / nc)
 		end
 		push!(vcountt, countt / nc)
 		push!(vcountp, countp / nc)
