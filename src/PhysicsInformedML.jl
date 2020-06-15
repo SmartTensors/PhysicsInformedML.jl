@@ -111,13 +111,14 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 				end
 			end
 			Xe[is,i] ./= nc
-			if plot
-				r2 = SVR.r2(Xo[is,i][.!pm], Xe[is,i][.!pm])
-				Mads.plotseries([Xo[is,i] Xe[is,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
-				NMFk.plotscatter(Xo[is,i][.!pm], Xe[is,i][.!pm]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+			r2 = SVR.r2(Xo[is,i][.!pm], Xe[is,i][.!pm])
+				if plot
+					Mads.plotseries([Xo[is,i] Xe[is,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
+					NMFk.plotscatter(Xo[is,i][.!pm], Xe[is,i][.!pm]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+				end
 				if countp > 0
 					r2 = SVR.r2(Xo[is,i][pm], Xe[is,i][pm])
-					NMFk.plotscatter(Xo[is,i][pm], Xe[is,i][pm]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+					plot && NMFk.plotscatter(Xo[is,i][pm], Xe[is,i][pm]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 				end
 			end
 			println(r, " ", countt / nc, " ", countp / nc, " ", times[i], " ", r2t / nc, " ", r2p / nc, " ")
