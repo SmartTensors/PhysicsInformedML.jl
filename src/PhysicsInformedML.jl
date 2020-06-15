@@ -130,7 +130,7 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 	return vcountt, vcountp, vr2t, vr2p
 end
 
-function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::UnitRange{Int64}=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::UnitRange{Int64}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
@@ -170,11 +170,8 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 			pm = SVR.get_prediction_mask(ncases, r; keepcases=keepcases)
 			lpm = Vector{Bool}(undef, 0)
 			for i = 1:length(times)
-				if i in ptimes
-					lpm = vcat(lpm, pm)
-				else
-					lpm = vcat(lpm, falses(length(pm)))
-				end
+				opm = (i in ptimes) ? pm : falses(length(pm))
+				lpm = vcat(lpm, opm)
 			end
 			vy_pr, lpm = SVR.fit_test(vy_tr, permutedims(T), r; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, pm=lpm)
 			vy_pr[vy_pr .< 0] .= 0
@@ -193,23 +190,25 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 			end
 			y_pr = reshape(vy_pr, ncases, ntimes)
 			for i = 1:length(times)
-				opm = i in ptimes ? pm : falses(length(pm))
+				opm = (i in ptimes) ? pm : falses(length(pm))
 				r2tt = SVR.r2(Xo[.!opm,i], y_pr[.!opm,i])
 				vr2tt[i] += r2tt
-				if plot
+				if plottime
 					Mads.plotseries([Xo[:,i] y_pr[:,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
 					NMFk.plotscatter(Xo[.!opm,i], y_pr[.!opm,i]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2tt; sigdigits=2))")
 				end
-				if sum(opm) > 0
+				if i in ptimes
 					r2tp = SVR.r2(Xo[opm,i], y_pr[opm,i])
 					vr2tp[i] += r2tp
-					plot && NMFk.plotscatter(Xo[opm,i], y_pr[opm,i]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2tp; sigdigits=2))")
+					plottime && NMFk.plotscatter(Xo[opm,i], y_pr[opm,i]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2tp; sigdigits=2))")
 				end
 			end
 		end
 		println(r, " ", countt / nc, " ", countp / nc, " ", r2t / nc, " ", r2p / nc, " ")
 		for i = 1:length(times)
-			!(i in ptimes) && println(times[i], " ", vr2tt[i] / nc, " ", vr2tp[i] / nc)
+			print(times[i], " ", vr2tt[i] / nc)
+			(i in ptimes) && print(" ", vr2tp[i] / nc)
+			print("\n")
 		end
 		push!(vcountt, countt / nc)
 		push!(vcountp, countp / nc)
