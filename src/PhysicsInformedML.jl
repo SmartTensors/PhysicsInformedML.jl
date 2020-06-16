@@ -41,7 +41,7 @@ function sensitivity(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatri
 	end
 end
 
-function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::UnitRange{Int64}=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::AbstractUnitRange=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
@@ -112,14 +112,13 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 			end
 			Xe[is,i] ./= nc
 			r2 = SVR.r2(Xo[is,i][.!pm], Xe[is,i][.!pm])
-				if plot
-					Mads.plotseries([Xo[is,i] Xe[is,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
-					NMFk.plotscatter(Xo[is,i][.!pm], Xe[is,i][.!pm]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2; sigdigits=2))")
-				end
-				if countp > 0
-					r2 = SVR.r2(Xo[is,i][pm], Xe[is,i][pm])
-					plot && NMFk.plotscatter(Xo[is,i][pm], Xe[is,i][pm]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
-				end
+			if plot
+				Mads.plotseries([Xo[is,i] Xe[is,i]]; xmin=1, xmax=size(Xo[:,i], 1), logy=false, names=["Truth", "Prediction"])
+				NMFk.plotscatter(Xo[is,i][.!pm], Xe[is,i][.!pm]; title="Training: Time: $(times[i]) days; Count: $(countt); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+			end
+			if countp > 0
+				r2 = SVR.r2(Xo[is,i][pm], Xe[is,i][pm])
+				plot && NMFk.plotscatter(Xo[is,i][pm], Xe[is,i][pm]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 			end
 			println(r, " ", countt / nc, " ", countp / nc, " ", times[i], " ", r2t / nc, " ", r2p / nc, " ")
 			push!(vcountt, countt / nc)
@@ -131,7 +130,7 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 	return vcountt, vcountp, vr2t, vr2p
 end
 
-function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::UnitRange{Int64}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
+function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; control::String="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nc::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
@@ -205,11 +204,9 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 				end
 			end
 		end
-		println(r, " ", countt / nc, " ", countp / nc, " ", r2t / nc, " ", r2p / nc, " ")
+		# println(r, " ", countt / nc, " ", countp / nc, " ", r2t / nc, " ", r2p / nc, " ")
 		for i = 1:length(times)
-			print(times[i], " ", vr2tt[i] / nc)
-			(i in ptimes) && print(" ", vr2tp[i] / nc)
-			print("\n")
+			println(r, " ", countt / nc, " ", countp / nc, " ", times[i], " ", vr2tt[i] / nc, " ", (i in ptimes) ? vr2tp[i] / nc : NaN)
 		end
 		push!(vcountt, countt / nc)
 		push!(vcountp, countp / nc)
