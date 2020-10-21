@@ -13,13 +13,13 @@ Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 SVR = "22bb73d7-edb2-5785-ba1e-7d60d6824784"
 
 [compat]
-DocumentFunction = "^0"
-Mads = "^0.10"
-NMFk = "^0.7"
-NTFk = "^0.4"
-Suppressor = "^0"
-SVR = "^0.8"
-julia = "^1.4"
+DocumentFunction = "1"
+Mads = "1"
+NMFk = "1"
+NTFk = "0.4, 1"
+Suppressor = "0.2, 0.3"
+SVR = "1"
+julia = "1.5"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
