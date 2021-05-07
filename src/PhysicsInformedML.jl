@@ -91,7 +91,7 @@ function piml(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn:
 			local pm
 			tr = i in ptimes ? r : 0
 			for k = 1:nc
-				y_pr, pm = SVR.fit_test(Xo[is,i], permutedims(T), tr; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, keepcases=keepcases[is])
+				y_pr, pm = SVR.fit_test(Xo[is,i], permutedims(T); ratio=tr, scale=true, quiet=true, epsilon=epsilon, gamma=gamma, keepcases=keepcases[is])
 				y_pr[y_pr .< 0] .= 0
 				countt += sum(.!pm)
 				countp += sum(pm)
@@ -173,7 +173,7 @@ function pimlt(Xo::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 				opm = (i in ptimes) ? pm : falses(length(pm))
 				lpm = vcat(lpm, opm)
 			end
-			vy_pr, lpm = SVR.fit_test(vy_tr, permutedims(T), r; scale=true, quiet=true, epsilon=epsilon, gamma=gamma, pm=lpm)
+			vy_pr, lpm = SVR.fit_test(vy_tr, permutedims(T); ratio=r, scale=true, quiet=true, epsilon=epsilon, gamma=gamma, pm=lpm)
 			vy_pr[vy_pr .< 0] .= 0
 			countt += sum(.!pm)
 			countp += sum(pm)
