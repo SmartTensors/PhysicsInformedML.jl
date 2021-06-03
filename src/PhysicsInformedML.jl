@@ -6,7 +6,7 @@ import NTFk
 import Mads
 import Suppressor
 
-function setdata(Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector; control::String="d", order=Colon(), mask=Colon())
+function setdata(Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector; control::AbstractString="d", order=Colon(), mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	if control == "i"
@@ -30,7 +30,7 @@ function setdata(Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, t
 	return T
 end
 
-function setdata(i::Integer, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray; control::String="d", order=Colon(), mask=Colon())
+function setdata(i::Integer, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray; control::AbstractString="d", order=Colon(), mask=Colon())
 	ntimes = size(Xdn, 1)
 	ncases = size(Xin, 1)
 	if control == "i"
@@ -95,7 +95,7 @@ end
 function pimlmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::AbstractVector=falses(length(y)))
 end
 
-function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, ratio::Number=0, control::String="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, mask=Colon())
+function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, ratio::Number=0, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	T = setdata(Xin, Xsn, Xdn, times; control=control, mask=mask)
@@ -131,7 +131,7 @@ function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xd
 	return y_pr, m, T
 end
 
-function calibrate(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, keepcases::BitArray, targets::AbstractVector, times::AbstractVector, omin::AbstractMatrix, omax::AbstractMatrix; control::String="i", svrdir::AbstractString="svr", madsdir::AbstractString="mads", load::Bool=false, save::Bool=true)
+function mads(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, keepcases::BitArray, targets::AbstractVector, times::AbstractVector, omin::AbstractMatrix, omax::AbstractMatrix; control::AbstractString="i", svrdir::AbstractString="svr", madsdir::AbstractString="mads", load::Bool=false, save::Bool=true, paramnames::Union{Nothing,AbstractVector}=nothing)
 	if load && isfile("$(svrdir)/$(control).svrmodel")
 		svrmodel = SVR.loadmodel("$(svrdir)/$(control).svrmodel")
 		svrdata = setdata(Xin, Xsn, Xdn, times; control=control)
@@ -144,13 +144,22 @@ function calibrate(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix
 		o = vec(NMFk.denormalizematrix_col!(permutedims(SVR.predict(svrmodel, xi)), omin, omax))
 		return o
 	end
-	mdd = Mads.createmadsproblem(vec(svrdata[1,2:end]), targets, svrpredict; problemname="$(madsdir)/$(control)", obstimes=times)
-	pe, optresults = Mads.calibrate(mdd)
-	Mads.plotmatches(mdd, pe; filename="$(madsdir)/$(control)-match.png")
-	return pe
+	v = vec(svrdata[1,2:end])
+	if paramnames === nothing
+		paramnames = ["p$i" for i=1:length(v)]
+	end
+	md = Mads.createmadsproblem(v, targets, svrpredict; problemname="$(madsdir)/$(control)", obstimes=times, paramnames=paramnames)
+	return md
 end
 
-function sensitivity(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; control::String="d", kw...)
+function calibrate(aw...; control::AbstractString="i", madsdir::AbstractString="mads", kw...)
+	md = Mads.mads(aw...; madsdir, kw...)
+	pe, optresults = Mads.calibrate(md)
+	Mads.plotmatches(md, pe; title="OF = $(round(optresults.minimum; digits=2))", filename="$(madsdir)/$(control)-match.png")
+	return pe, optresults
+end
+
+function sensitivity(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; control::AbstractString="d", kw...)
 	if control == "i"
 		sz = size(Xin, 2)
 	elseif control == "s"
@@ -185,7 +194,7 @@ function sensitivity(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatr
 	end
 end
 
-function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, control::String="d", ptimes::AbstractUnitRange=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
+function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, control::AbstractString="d", ptimes::AbstractUnitRange=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
@@ -256,7 +265,7 @@ function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstra
 	return vcountt, vcountp, vr2t, vr2p
 end
 
-function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, control::String="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
+function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
