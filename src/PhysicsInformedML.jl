@@ -96,8 +96,8 @@ function fluxmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keep
 		@assert length(pm) == size(x, 2)
 		@assert eltype(pm) <: Bool
 	end
-	m = fluxtrain(y[.!pm], x[:,.!pm]) #TODO Dannile please develop this function
-	y_pr = fluxtrain(m, x) #TODO Dannile please develop this function
+	m = fluxtrain(y[.!pm], x[:,.!pm]) #TODO Daniel please develop this function
+	y_pr = fluxtrain(m, x) #TODO Daniel please develop this function
 	y_pr[y_pr .< 0] .= 0
 	return y_pr, pm, m
 end
@@ -109,8 +109,8 @@ function pimlmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keep
 		@assert length(pm) == size(x, 2)
 		@assert eltype(pm) <: Bool
 	end
-	m = pimltrain(y[.!pm], x[:,.!pm]) #TODO Dannile please develop this function
-	y_pr = pimltrain(m, x) #TODO Dannile please develop this function
+	m = pimltrain(y[.!pm], x[:,.!pm]) #TODO Daniel please develop this function
+	y_pr = pimltrain(m, x) #TODO Daniel please develop this function
 	y_pr[y_pr .< 0] .= 0
 	return y_pr, pm, m
 end
