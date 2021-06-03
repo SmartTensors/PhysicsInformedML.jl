@@ -90,9 +90,29 @@ function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepca
 end
 
 function fluxmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::AbstractVector=falses(length(y)))
+	if pm === nothing
+		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
+	else
+		@assert length(pm) == size(x, 2)
+		@assert eltype(pm) <: Bool
+	end
+	m = fluxtrain(y[.!pm], x[:,.!pm]) #TODO Dannile please develop this function
+	y_pr = fluxtrain(m, x) #TODO Dannile please develop this function
+	y_pr[y_pr .< 0] .= 0
+	return y_pr, pm, m
 end
 
 function pimlmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::AbstractVector=falses(length(y)))
+	if pm === nothing
+		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
+	else
+		@assert length(pm) == size(x, 2)
+		@assert eltype(pm) <: Bool
+	end
+	m = pimltrain(y[.!pm], x[:,.!pm]) #TODO Dannile please develop this function
+	y_pr = pimltrain(m, x) #TODO Dannile please develop this function
+	y_pr[y_pr .< 0] .= 0
+	return y_pr, pm, m
 end
 
 function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, ratio::Number=0, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, mask=Colon())
