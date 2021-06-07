@@ -161,7 +161,9 @@ function mads(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn
 	end
 	function svrpredict(x::AbstractVector)
 		xi = permutedims([log10.(times) permutedims(repeat(x, outer=(1,length(times))))])
-		o = vec(NMFk.denormalizematrix_col!(permutedims(SVR.predict(svrmodel, xi)), omin, omax))
+		y = SVR.predict(svrmodel, xi)
+		y[y .< 0] .= 0
+		o = vec(NMFk.denormalizematrix_col!(permutedims(y), omin, omax))
 		return o
 	end
 	v = vec(svrdata[1,2:end])
