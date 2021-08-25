@@ -72,7 +72,7 @@ function setup_mask(ratio::Number, keepcases::BitArray, ncases, ntimes, ptimes::
 	return pm, lpm
 end
 
-function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepcases::BitArray=trues(length(y)), pm::AbstractVector=falses(length(y)), normalize::Bool=true, scale::Bool=true, epsilon::Float64=.000000001, gamma::Float64=0.1, check::Bool=false)
+function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepcases::BitArray=trues(length(y)), pm::Union{AbstractVector,Nothing}=nothing, normalize::Bool=true, scale::Bool=true, epsilon::Float64=.000000001, gamma::Float64=0.1, check::Bool=false)
 	if pm === nothing
 		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
 	else
@@ -89,7 +89,7 @@ function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepca
 	return y_pr, pm, m
 end
 
-function fluxmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::AbstractVector=falses(length(y)))
+function fluxmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::Union{AbstractVector,Nothing}=nothing)
 	if pm === nothing
 		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
 	else
@@ -102,7 +102,7 @@ function fluxmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keep
 	return y_pr, pm, m
 end
 
-function pimlmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::AbstractVector=falses(length(y)))
+function pimlmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::Union{AbstractVector,Nothing}=nothing)
 	if pm === nothing
 		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
 	else
@@ -232,9 +232,9 @@ function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstra
 				return
 			end
 			Xen, _, _ = NMFk.normalize!(Xe; amin=0)
-			if i > 1 # add past estimates for training
-				# T = [T Xon[is,1:i-1]]
-				T = [T Xen[is,1:i-1]]
+			if i > 1 # add past estimates or observations for training
+				# T = [T Xon[is,1:i-1]] # add past observations
+				T = [T Xen[is,1:i-1]] # add past estimates
 			end
 			Xe[is,i] .= 0
 			local countt = 0
