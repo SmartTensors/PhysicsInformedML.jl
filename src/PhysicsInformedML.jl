@@ -231,7 +231,7 @@ function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstra
 			if isnothing(T)
 				return
 			end
-			Xen, _, _ = NMFk.normalize!(Xe; amin=0)
+			Xen, _, _ = NMFk.normalize(Xe; amin=0)
 			if i > 1 # add past estimates or observations for training
 				# T = [T Xon[is,1:i-1]] # add past observations
 				T = [T Xen[is,1:i-1]] # add past estimates
