@@ -6,23 +6,47 @@ import NTFk
 import Mads
 import Suppressor
 
+function setdata(Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, Xt::AbstractMatrix; control::AbstractString="d", order=Colon(), mask=Colon())
+	ntimes = size(Xt, 1)
+	ncases = size(Xin, 1)
+	if control == "i"
+		T = [repeat(Xt; inner=(ncases,1)) repeat(Xin[order,mask], ntimes)]
+	elseif control == "s"
+		T = [repeat(Xt; inner=(ncases,1)) repeat(Xsn[order,mask], ntimes)]
+	elseif control == "d"
+		T = [repeat(Xt; inner=(ncases,1)) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases, size(Xdn[:,order,mask], 3)))]
+	elseif control == "is"
+		T = [repeat(Xt; inner=(ncases,1)) repeat(Xin[order,mask], ntimes) repeat(Xsn[:,mask], ntimes)]
+	elseif control == "id"
+		T = [repeat(Xt; inner=(ncases,1)) repeat(Xin[order,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,order,mask], 3))]
+	elseif control == "sd"
+		T = [repeat(Xt; inner=(ncases,1)) repeat(Xsn[order,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,order,mask], 3))]
+	elseif control == "isd"
+		T = [repeat(Xt; inner=(ncases,1)) repeat(Xin[order,mask], ntimes) repeat(Xsn[:,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,:,mask], 3))]
+	else
+		@warn "Unknown $(control)! Failed!"
+		T = nothing
+	end
+	return T
+end
+
 function setdata(Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector; control::AbstractString="d", order=Colon(), mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	if control == "i"
-		T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[order,mask], ntimes)]
+		T = [repeat(times; inner=ncases) repeat(Xin[order,mask], ntimes)]
 	elseif control == "s"
-		T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xsn[order,mask], ntimes)]
+		T = [repeat(times; inner=ncases) repeat(Xsn[order,mask], ntimes)]
 	elseif control == "d"
-		T = [repeat(times[1:ntimes]; inner=ncases) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases, size(Xdn[:,order,mask], 3)))]
+		T = [repeat(times; inner=ncases) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases, size(Xdn[:,order,mask], 3)))]
 	elseif control == "is"
-		T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[order,mask], ntimes) repeat(Xsn[:,mask], ntimes)]
+		T = [repeat(times; inner=ncases) repeat(Xin[order,mask], ntimes) repeat(Xsn[:,mask], ntimes)]
 	elseif control == "id"
-		T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[order,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,order,mask], 3))]
+		T = [repeat(times; inner=ncases) repeat(Xin[order,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,order,mask], 3))]
 	elseif control == "sd"
-		T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xsn[order,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,order,mask], 3))]
+		T = [repeat(times; inner=ncases) repeat(Xsn[order,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,order,mask], 3))]
 	elseif control == "isd"
-		T = [repeat(times[1:ntimes]; inner=ncases) repeat(Xin[order,mask], ntimes) repeat(Xsn[:,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,:,mask], 3))]
+		T = [repeat(times; inner=ncases) repeat(Xin[order,mask], ntimes) repeat(Xsn[:,mask], ntimes) reshape(permutedims(Xdn[:,order,mask], [2,1,3]), (ntimes * ncases), size(Xdn[:,:,mask], 3))]
 	else
 		@warn "Unknown $(control)! Failed!"
 		T = nothing
@@ -145,7 +169,7 @@ function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xd
 	y_pr = reshape(vy_pr, ncases, ntimes)
 	if plottime
 		for i = 1:ncases
-			Mads.plotseries(permutedims([Xon[i:ncases:end,:]; y_pr[i:ncases:end,:]]); xmin=1, xmax=length(times), logy=false, names=["Truth", "Prediction"])
+			Mads.plotseries(permutedims([Xon[i:ncases:end,:]; y_pr[i:ncases:end,:]]); xmin=1, xmax=ntimes, logy=false, names=["Truth", "Prediction"])
 		end
 	end
 	return y_pr, m, T
@@ -218,7 +242,6 @@ end
 
 function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, control::AbstractString="d", ptimes::AbstractUnitRange=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
 	ntimes = length(times)
-	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
 	vcountp = Vector{Int64}(undef, 0)
 	vr2t = Vector{Float64}(undef, 0)
@@ -287,17 +310,21 @@ function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstra
 	return vcountt, vcountp, vr2t, vr2p
 end
 
-function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
+function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, Xtn::AbstractMatrix=Matrix(undef, 0, 0); modeltype::Symbol=:svr, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
 	vcountp = Vector{Int64}(undef, 0)
 	vr2t = Vector{Float64}(undef, 0)
 	vr2p = Vector{Float64}(undef, 0)
-	vr2tt = Vector{Float64}(undef, length(times))
-	vr2tp = Vector{Float64}(undef, length(times))
+	vr2tt = Vector{Float64}(undef, ntimes)
+	vr2tp = Vector{Float64}(undef, ntimes)
 	for r in trainingrange
-		T = setdata(Xin, Xsn, Xdn, times; control=control, mask=mask)
+		if sizeof(Xtn) > 0
+			T = setdata(Xin, Xsn, Xdn, [times Xtn]; control=control, mask=mask)
+		else
+			T = setdata(Xin, Xsn, Xdn, times; control=control, mask=mask)
+		end
 		if isnothing(T)
 			return
 		end
@@ -331,7 +358,7 @@ function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstr
 				plot && NMFk.plotscatter(vy_tr[lpm], vy_pr[lpm]; title="Prediction Size: $(sum(pm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 			end
 			y_pr = reshape(vy_pr, ncases, ntimes)
-			for i = 1:length(times)
+			for i = 1:ntimes
 				opm = (i in ptimes) ? pm : falses(length(pm))
 				r2tt = SVR.r2(Xon[.!opm,i], y_pr[.!opm,i])
 				vr2tt[i] += r2tt
@@ -347,7 +374,7 @@ function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstr
 			end
 		end
 		# println(r, " ", countt / nreruns, " ", countp / nreruns, " ", r2t / nreruns, " ", r2p / nreruns, " ")
-		for i = 1:length(times)
+		for i = 1:ntimes
 			println(r, " ", countt / nreruns, " ", countp / nreruns, " ", times[i], " ", vr2tt[i] / nreruns, " ", (i in ptimes) ? vr2tp[i] / nreruns : NaN)
 		end
 		push!(vcountt, countt / nreruns)
