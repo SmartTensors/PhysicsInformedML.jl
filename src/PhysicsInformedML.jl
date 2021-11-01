@@ -40,21 +40,21 @@ function setdata(i::Integer, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::Abst
 	elseif control == "d"
 		T = Xdn[i,order,mask]
 	elseif control == "a" # all transients
-		T = reshape(permutedims(Xdn[:,:,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,:,mask], 3)))[order,:]
+		T = reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))
 	elseif control == "is"
-		T = [Xin[order,:] Xsn[order,:]]
+		T = [Xin[order,mask] Xsn[order,mask]]
 	elseif control == "id"
-		T = [Xin[order,:] Xdn[i,order,:]]
+		T = [Xin[order,mask] Xdn[i,order,mask]]
 	elseif control == "sd"
-		T = [Xsn[order,:] Xdn[i,order,:]]
+		T = [Xsn[order,mask] Xdn[i,order,mask]]
 	elseif control == "isd"
-		T = [Xin[order,:] Xsn[order,:] Xdn[i,order,:]]
+		T = [Xin[order,mask] Xsn[order,mask] Xdn[i,order,mask]]
 	elseif control == "ia"
-		T = [Xin[order,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[order,:]]
+		T = [Xin[order,mask] reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))]
 	elseif control == "sa"
-		T = [Xsn[order,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[order,:]]
+		T = [Xsn[order,mask] reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))]
 	elseif control == "isa"
-		T = [Xin[order,:] Xsn[order,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[order,:]]
+		T = [Xin[order,mask] Xsn[order,mask] reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))]
 	else
 		@warn "Unknown $(control)! Failed!"
 		T = nothing
@@ -72,17 +72,17 @@ function setup_mask(ratio::Number, keepcases::BitArray, ncases, ntimes, ptimes::
 	return pm, lpm
 end
 
-function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepcases::BitArray=trues(length(y)), pm::Union{AbstractVector,Nothing}=nothing, normalize::Bool=true, scale::Bool=true, epsilon::Float64=.000000001, gamma::Float64=0.1, check::Bool=false)
+function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepcases::BitArray=trues(length(y)), pm::Union{AbstractVector,Nothing}=nothing, epsilon::Float64=.000000001, gamma::Float64=0.1, check::Bool=false)
 	if pm === nothing
 		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
 	else
 		@assert length(pm) == size(x, 2)
 		@assert eltype(pm) <: Bool
 	end
-	m = SVR.train(y[.!pm], x[:,.!pm]; epsilon=epsilon, gamma=gamma, normalize=normalize, scale=scale)
+	m = SVR.train(y[.!pm], x[:,.!pm]; epsilon=epsilon, gamma=gamma)
 	y_pr = SVR.predict(m, x)
 	if check
-		y_pr2, _, _ = SVR.fit_test(y, x; ratio=ratio, quiet=true, pm=pm, keepcases=keepcases, normalize=normalize, scale=scale, epsilon=epsilon, gamma=gamma)
+		y_pr2, _, _ = SVR.fit_test(y, x; ratio=ratio, quiet=true, pm=pm, keepcases=keepcases, epsilon=epsilon, gamma=gamma)
 		@assert vy_pr == vy_pr2
 	end
 	y_pr[y_pr .< 0] .= 0
