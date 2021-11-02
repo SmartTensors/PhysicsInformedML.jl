@@ -2,8 +2,8 @@ module PhysicsInformedML
 
 import SVR
 import NMFk
-import NTFk
 import Mads
+import Printf
 import Suppressor
 
 function setdata(Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, Xt::AbstractMatrix; control::AbstractString="d", order=Colon(), mask=Colon())
@@ -64,21 +64,21 @@ function setdata(i::Integer, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::Abst
 	elseif control == "d"
 		T = Xdn[i,order,mask]
 	elseif control == "a" # all transients
-		T = reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))
+		T = reshape(permutedims(Xdn[:,:,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,:,mask], 3)))[order,:]
 	elseif control == "is"
-		T = [Xin[order,mask] Xsn[order,mask]]
+		T = [Xin[order,:] Xsn[order,:]]
 	elseif control == "id"
-		T = [Xin[order,mask] Xdn[i,order,mask]]
+		T = [Xin[order,:] Xdn[i,order,:]]
 	elseif control == "sd"
-		T = [Xsn[order,mask] Xdn[i,order,mask]]
+		T = [Xsn[order,:] Xdn[i,order,:]]
 	elseif control == "isd"
-		T = [Xin[order,mask] Xsn[order,mask] Xdn[i,order,mask]]
+		T = [Xin[order,:] Xsn[order,:] Xdn[i,order,:]]
 	elseif control == "ia"
-		T = [Xin[order,mask] reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))]
+		T = [Xin[order,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[order,:]]
 	elseif control == "sa"
-		T = [Xsn[order,mask] reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))]
+		T = [Xsn[order,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[order,:]]
 	elseif control == "isa"
-		T = [Xin[order,mask] Xsn[order,mask] reshape(permutedims(Xdn[:,order,mask], [2,1,3]), ncases, (ntimes * size(Xdn[:,order,mask], 3)))]
+		T = [Xin[order,:] Xsn[order,:] reshape(permutedims(Xdn, [2,1,3]), ncases, (ntimes * size(Xdn, 3)))[order,:]]
 	else
 		@warn "Unknown $(control)! Failed!"
 		T = nothing
@@ -96,9 +96,9 @@ function setup_mask(ratio::Number, keepcases::BitArray, ncases, ntimes, ptimes::
 	return pm, lpm
 end
 
-function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepcases::BitArray=trues(length(y)), pm::Union{AbstractVector,Nothing}=nothing, epsilon::Float64=.000000001, gamma::Float64=0.1, check::Bool=false)
+function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepcases::BitArray=trues(length(y)), pm::Union{AbstractVector,Nothing}=nothing, normalize::Bool=true, scale::Bool=true, epsilon::Float64=.000000001, gamma::Float64=0.1, check::Bool=false, kw...)
 	if pm === nothing
-		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
+		pm = SVR.get_prediction_mask(length(y), ratio; keepcases=keepcases)
 	else
 		@assert length(pm) == size(x, 2)
 		@assert eltype(pm) <: Bool
@@ -106,7 +106,7 @@ function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepca
 	m = SVR.train(y[.!pm], x[:,.!pm]; epsilon=epsilon, gamma=gamma)
 	y_pr = SVR.predict(m, x)
 	if check
-		y_pr2, _, _ = SVR.fit_test(y, x; ratio=ratio, quiet=true, pm=pm, keepcases=keepcases, epsilon=epsilon, gamma=gamma)
+		y_pr2, _, _ = SVR.fit_test(y, x; ratio=ratio, quiet=true, pm=pm, keepcases=keepcases, epsilon=epsilon, gamma=gamma, kw...)
 		@assert vy_pr == vy_pr2
 	end
 	y_pr[y_pr .< 0] .= 0
@@ -115,31 +115,31 @@ end
 
 function fluxmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::Union{AbstractVector,Nothing}=nothing)
 	if pm === nothing
-		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
+		pm = SVR.get_prediction_mask(length(y), ratio; keepcases=keepcases)
 	else
 		@assert length(pm) == size(x, 2)
 		@assert eltype(pm) <: Bool
 	end
-	m = fluxtrain(y[.!pm], x[:,.!pm]) #TODO Daniel please develop this function
-	y_pr = fluxtrain(m, x) #TODO Daniel please develop this function
+	m = fluxtrain(y[.!pm], x[:,.!pm])
+	y_pr = fluxtrain(m, x)
 	y_pr[y_pr .< 0] .= 0
 	return y_pr, pm, m
 end
 
 function pimlmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0.1, keepcases::BitArray, pm::Union{AbstractVector,Nothing}=nothing)
 	if pm === nothing
-		pm = get_prediction_mask(length(y), ratio; keepcases=keepcases)
+		pm = SVR.get_prediction_mask(length(y), ratio; keepcases=keepcases)
 	else
 		@assert length(pm) == size(x, 2)
 		@assert eltype(pm) <: Bool
 	end
-	m = pimltrain(y[.!pm], x[:,.!pm]) #TODO Daniel please develop this function
-	y_pr = pimltrain(m, x) #TODO Daniel please develop this function
+	m = pimltrain(y[.!pm], x[:,.!pm])
+	y_pr = pimltrain(m, x)
 	y_pr[y_pr .< 0] .= 0
 	return y_pr, pm, m
 end
 
-function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, ratio::Number=0, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, mask=Colon())
+function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, ratio::Number=0, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, mask=Colon(), kw...)
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	T = setdata(Xin, Xsn, Xdn, times; control=control, mask=mask)
@@ -149,14 +149,14 @@ function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xd
 	pm, lpm = setup_mask(ratio, keepcases, ncases, ntimes, ptimes)
 	vy_tr = vec(Xon[:,1:ntimes])
 	if modeltype == :svr
-		vy_pr, _, m = svrmodel(vy_tr, permutedims(T); pm=lpm)
+		vy_pr, _, m = svrmodel(vy_tr, permutedims(T); pm=lpm, kw...)
 	elseif modeltype == :flux
 		vy_pr, _, m = fluxmodel(vy_tr, T; pm=lpm)
 	elseif modeltype == :piml
 		vy_pr, _, m = pimlmodel(vy_tr, T; pm=lpm)
 	else
 		@warn("Unknown model type! SVR will be used!")
-		vy_pr, _, m = svrmodel(vy_tr, permutedims(T); pm=lpm)
+		vy_pr, _, m = svrmodel(vy_tr, permutedims(T); pm=lpm, kw...)
 	end
 	r2 = SVR.r2(vy_tr[.!lpm], vy_pr[.!lpm])
 	if plot
@@ -169,40 +169,10 @@ function model(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xd
 	y_pr = reshape(vy_pr, ncases, ntimes)
 	if plottime
 		for i = 1:ncases
-			Mads.plotseries(permutedims([Xon[i:ncases:end,:]; y_pr[i:ncases:end,:]]); xmin=1, xmax=ntimes, logy=false, names=["Truth", "Prediction"])
+			Mads.plotseries(permutedims([Xon[i:ncases:end,:]; y_pr[i:ncases:end,:]]); xaxis=times, xmin=0, xmax=times[emd], logy=false, names=["Truth", "Prediction"])
 		end
 	end
 	return y_pr, m, T
-end
-
-function mads(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, keepcases::BitArray, targets::AbstractVector, times::AbstractVector, omin::AbstractMatrix, omax::AbstractMatrix; control::AbstractString="i", svrdir::AbstractString="svr", madsdir::AbstractString="mads", load::Bool=false, save::Bool=true, paramnames::Union{Nothing,AbstractVector}=nothing)
-	if load && isfile("$(svrdir)/$(control).svrmodel")
-		svrmodel = SVR.loadmodel("$(svrdir)/$(control).svrmodel")
-		svrdata = setdata(Xin, Xsn, Xdn, times; control=control)
-	else
-		svrpred, svrmodel, svrdata = PhysicsInformedML.model(Xon, Xin, Xsn, Xdn, log10.(times), keepcases; control=control)
-		save && SVR.savemodel(svrmodel, "$(svrdir)/$(control).svrmodel")
-	end
-	function svrpredict(x::AbstractVector)
-		xi = permutedims([log10.(times) permutedims(repeat(x, outer=(1,length(times))))])
-		y = SVR.predict(svrmodel, xi)
-		y[y .< 0] .= 0
-		o = vec(NMFk.denormalizematrix_col!(permutedims(y), omin, omax))
-		return o
-	end
-	v = vec(svrdata[1,2:end])
-	if paramnames === nothing
-		paramnames = ["p$i" for i=1:length(v)]
-	end
-	md = Mads.createmadsproblem(v, targets, svrpredict; problemname="$(madsdir)/$(control)", obstimes=times, paramnames=paramnames)
-	return md
-end
-
-function calibrate(aw...; control::AbstractString="i", madsdir::AbstractString="mads", kw...)
-	md = Mads.mads(aw...; madsdir, kw...)
-	pe, optresults = Mads.calibrate(md)
-	Mads.plotmatches(md, pe; title="OF = $(round(optresults.minimum; digits=2))", filename="$(madsdir)/$(control)-match.png")
-	return pe, optresults
 end
 
 function sensitivity(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; control::AbstractString="d", kw...)
@@ -242,12 +212,14 @@ end
 
 function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray; modeltype::Symbol=:svr, control::AbstractString="d", ptimes::AbstractUnitRange=1:length(times), plot::Bool=false, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
 	ntimes = length(times)
+	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)
 	vcountp = Vector{Int64}(undef, 0)
 	vr2t = Vector{Float64}(undef, 0)
 	vr2p = Vector{Float64}(undef, 0)
 	for r in trainingrange
 		Xe = copy(Xon)
+		@Printf.printf("%8s %8s %8s %8s %10s %8s\n", "Ratio", "#Train", "#Pred", "Time", "R2 train", "R2 pred")
 		for i = 1:ntimes
 			is = sortperm(Xon[:,i])
 			T = setdata(i, Xin, Xsn, Xdn; control=control, mask=mask, order=is)
@@ -300,12 +272,17 @@ function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstra
 				r2 = SVR.r2(Xon[is,i][pm], Xe[is,i][pm])
 				plot && NMFk.plotscatter(Xon[is,i][pm], Xe[is,i][pm]; title="Prediction: Time: $(times[i]) days; Count: $(countp); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 			end
-			println(r, " ", countt / nreruns, " ", countp / nreruns, " ", times[i], " ", r2t / nreruns, " ", r2p / nreruns, " ")
+			if sum(pm) > 0
+				@Printf.printf("%8.2f %8.0f %8.0f %8.0f %10.4f %8.4f\n", r, countt / nreruns, countp / nreruns, times[i], r2t / nreruns, r2p / nreruns)
+			else
+				@Printf.printf("%8.2f %8.0f %8.0f %8.0f %10.4f %8s\n", r, countt / nreruns, countp / nreruns, times[i], r2t / nreruns, "-")
+			end
 			push!(vcountt, countt / nreruns)
 			push!(vcountp, countp / nreruns)
 			push!(vr2t, r2t / nreruns)
 			push!(vr2p, r2p / nreruns)
 		end
+		println()
 	end
 	return vcountt, vcountp, vr2t, vr2p
 end
@@ -373,10 +350,15 @@ function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::Abstr
 				end
 			end
 		end
-		# println(r, " ", countt / nreruns, " ", countp / nreruns, " ", r2t / nreruns, " ", r2p / nreruns, " ")
+		@Printf.printf("%8s %8s %8s %8s %10s %8s\n", "Ratio", "#Train", "#Pred", "Time", "R2 train", "R2 pred")
 		for i = 1:ntimes
-			println(r, " ", countt / nreruns, " ", countp / nreruns, " ", times[i], " ", vr2tt[i] / nreruns, " ", (i in ptimes) ? vr2tp[i] / nreruns : NaN)
+			if i in ptimes
+				@Printf.printf("%8.2f %8.0f %8.0f %8.0f %10.4f %8.4f\n", r, countt / nreruns, countp / nreruns, times[i], vr2tt[i] / nreruns, vr2tp[i] / nreruns)
+			else
+				@Printf.printf("%8.2f %8.0f %8.0f %8.0f %10.4f %8s\n", r, countt / nreruns, countp / nreruns, times[i], vr2tt[i] / nreruns, "-")
+			end
 		end
+		println()
 		push!(vcountt, countt / nreruns)
 		push!(vcountp, countp / nreruns)
 		push!(vr2t, r2t / nreruns)
