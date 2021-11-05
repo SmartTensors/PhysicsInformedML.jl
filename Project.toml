@@ -1,7 +1,7 @@
 name = "PhysicsInformedML"
 uuid = "ddcc5653-dcaa-48f1-be98-eb2dafe13740"
 authors = ["monty <velimir.vesselinov@gmail.com>"]
-version = "0.3.0"
+version = "0.3.1"
 
 [deps]
 DocumentFunction = "e1f3b4f0-2dc4-57d3-83f7-d4b7faf3b05b"
