@@ -1,1 +1,2 @@
-# PhysicsInformedML.jl
+PhysicsInformedML
+-----
