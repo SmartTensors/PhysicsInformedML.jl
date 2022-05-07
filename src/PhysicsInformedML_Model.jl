@@ -3,9 +3,6 @@ import NMFk
 import SVR
 import Printf
 import Suppressor
-import DelimitedFiles
-import Interpolations
-import JLD
 
 function setdata(Xin::AbstractMatrix, Xt::AbstractMatrix; order=Colon(), mask=Colon())
 	ntimes = size(Xt, 1)
@@ -96,19 +93,7 @@ function model(Xon::AbstractMatrix, Xin::AbstractMatrix, times::AbstractVector, 
 	return y_pr, m, T
 end
 
-function sensitivity(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; kw...)
-	if control == "i"
-		sz = size(Xin, 2)
-	elseif control == "s"
-		sz = size(Xsn, 2)
-	elseif control == "d"
-		sz = size(Xdn, 3)
-	elseif control == "a"
-		sz = size(Xdn, 3)
-	else
-		@warn "Unknown $control! Failed!"
-		return nothing
-	end
+function sensitivity(Xon::AbstractMatrix, Xin::AbstractMatrix, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; kw...)
 	@assert sz == length(attributes)
 	mask = trues(sz)
 	local vcountt
@@ -208,7 +193,7 @@ function analysis_eachtime(Xon::AbstractMatrix, Xin::AbstractMatrix, times::Abst
 	return vcountt, vcountp, vr2t, vr2p
 end
 
-function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, times::AbstractVector, keepcases::BitArray, Xtn::AbstractMatrix=Matrix(undef, 0, 0); modeltype::Symbol=:svr, control::AbstractString="d", ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
+function analysis_transient(Xon::AbstractMatrix, Xin::AbstractMatrix, times::AbstractVector, keepcases::BitArray, Xtn::AbstractMatrix=Matrix(undef, 0, 0); modeltype::Symbol=:svr, ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, trainingrange::AbstractVector=[0., 0.05, 0.1, 0.2, 0.33], epsilon::Float64=.000000001, gamma::Float64=0.1, nreruns::Int64=10, mask=Colon())
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	vcountt = Vector{Int64}(undef, 0)

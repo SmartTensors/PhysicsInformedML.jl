@@ -3,9 +3,6 @@ import NMFk
 import SVR
 import Printf
 import Suppressor
-import DelimitedFiles
-import Interpolations
-import JLD
 
 function mads(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, keepcases::BitArray, targets::AbstractVector, times::AbstractVector, Xtn::AbstractMatrix=Matrix(undef, 0, 0); obsmin::AbstractArray=Matrix(undef, 0, 0), obsmax::AbstractArray=Matrix(undef, 0, 0), case::AbstractString, control::AbstractString, filtertimes::AbstractVector=trues(length(times)), svrdir::AbstractString=joinpath(GIMI.dir, "svr"), madsdir::AbstractString=joinpath(GIMI.dir, "mads"), load::Bool=false, save::Bool=true, paramnames::Union{Nothing,AbstractVector}=nothing, obstarget::AbstractVector=targets[filtertimes], obstime::AbstractVector=times[filtertimes], mapping::Function=i->i, Xntn::AbstractMatrix=Matrix(undef, 0, 0), negpenalty::Bool=false, maxpenalty::Bool=false, parammin::AbstractArray=Vector{Float32}(undef, 0), parammax::AbstractArray=Vector{Float32}(undef, 0), input_dict::AbstractDict=Dict(), paramkey::Union{Nothing,AbstractVector}=nothing, thickness_ratio::Number=1, kw...)
 	filesvrmodel = joinpath(svrdir, "$(case)_$(control).svrmodel")
