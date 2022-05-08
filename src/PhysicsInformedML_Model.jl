@@ -38,59 +38,88 @@ end
 
 function svrmodel(y::AbstractVector, x::AbstractMatrix; ratio::Number=0., keepcases::BitArray=trues(length(y)), pm::Union{AbstractVector,Nothing}=nothing, normalize::Bool=true, scale::Bool=true, epsilon::Float64=.000000001, gamma::Float64=0.1, check::Bool=false, kw...)
 	if pm === nothing
-		pm = SVR.get_prediction_mask(length(y), ratio; keepcases=keepcases)
+		pm = SVR.get_prediction_mask(length(y), ratio; keepcases=keepcases, debug=true)
 	else
-		@assert length(pm) == size(x, 2)
+		@assert length(pm) == size(x, 1)
 		@assert eltype(pm) <: Bool
 	end
-	m = SVR.train(y[.!pm], x[:,.!pm]; epsilon=epsilon, gamma=gamma)
-	y_pr = SVR.predict(m, x)
+	xt = permutedims(x)
+	m = SVR.train(y[.!pm], xt[:,.!pm]; epsilon=epsilon, gamma=gamma)
+	y_pr = SVR.predict(m, xt)
 	if check
-		y_pr2, _, _ = SVR.fit_test(y, x; ratio=ratio, quiet=true, pm=pm, keepcases=keepcases, epsilon=epsilon, gamma=gamma, kw...)
+		y_pr2, _, _ = SVR.fit_test(y, xt; ratio=ratio, quiet=true, pm=pm, keepcases=keepcases, epsilon=epsilon, gamma=gamma, kw...)
 		@assert vy_pr == vy_pr2
 	end
 	y_pr[y_pr .< 0] .= 0
 	return y_pr, pm, m
 end
 
-function model(Xon::AbstractMatrix, Xin::AbstractMatrix, times::AbstractVector, keepcases::BitArray, Xtn::AbstractMatrix=Matrix(undef, 0, 0); modeltype::Symbol=:svr, ratio::Number=0, ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, mask=Colon(), kw...)
+function model(Xo::AbstractMatrix, Xi::AbstractMatrix, keepcases::BitArray=falses(size(Xo, 1)), times::AbstractVector=Vector(undef, 0), Xtn::AbstractMatrix=Matrix(undef, 0, 0); modeltype::Symbol=:svr, ratio::Number=0, ptimes::Union{Vector{Integer},AbstractUnitRange}=1:length(times), plot::Bool=false, plottime::Bool=plot, mask=Colon(), kw...)
+	inan = vec(.!isnan.(Xo)) .|| vec(.!isnan.(sum(Xi, dims=2)))
+	Xon, Xomin, Xomax, Xob = NMFk.normalizematrix_col(Xo[inan,:])
+	Xin, Ximin, Ximax, Xib = NMFk.normalizematrix_col(Xi[inan,:])
 	ntimes = length(times)
 	ncases = size(Xin, 1)
 	if sizeof(Xtn) > 0
+		@assert size(Xtn, 1) == ntimes
 		T = setdata(Xin, [times Xtn]; mask=mask)
-	else
+	elseif length(times) > 0
 		T = setdata(Xin, times; mask=mask)
+	else
+		@assert size(Xon, 2) == 1
+		T = Xin[mask,:]
 	end
-	if isnothing(T)
-		return
+	if ntimes > 0
+		vy_trn = vec(Xon[:,1:ntimes])
+		pm, lpm = setup_mask(ratio, keepcases, ncases, ntimes, ptimes)
+	else
+		vy_trn = vec(Xon)
+		pm = SVR.get_prediction_mask(length(vy_trn), ratio; keepcases=keepcases, debug=true)
+		lpm = pm
 	end
-	pm, lpm = setup_mask(ratio, keepcases, ncases, ntimes, ptimes)
-	vy_tr = vec(Xon[:,1:ntimes])
 	if modeltype == :svr
-		vy_pr, _, m = svrmodel(vy_tr, permutedims(T); pm=lpm, kw...)
+		vy_prn, _, m = svrmodel(vy_trn, T; pm=lpm, kw...)
 	elseif modeltype == :flux
-		vy_pr, _, m = fluxmodel(vy_tr, T; pm=lpm)
+		vy_prn, _, m = fluxmodel(vy_trn, T; pm=lpm)
 	elseif modeltype == :piml
-		vy_pr, _, m = pimlmodel(vy_tr, T; pm=lpm)
+		vy_prn, _, m = pimlmodel(vy_trn, T; pm=lpm)
 	else
 		@warn("Unknown model type! SVR will be used!")
-		vy_pr, _, m = svrmodel(vy_tr, permutedims(T); pm=lpm, kw...)
+		vy_prn, _, m = svrmodel(vy_trn, T; pm=lpm, kw...)
+	end
+	vy_pr = NMFk.denormalize(vy_prn, Xomin, Xomax)
+	vy_tr = NMFk.denormalize(vy_trn, Xomin, Xomax)
+	function pimlmodel(X)
+		nc = size(X, 1)
+		Xn, _, _, _ = NMFk.normalizematrix_col(X; amin=Ximin, amax=Ximax)
+		Yn = SVR.predict(m, Xn')
+		Y = NMFk.denormalize(Yn, Xomin, Xomax)
+		if ntimes > 0
+			Y = reshape(Y, nc, ntimes)
+		else
+			Y = reshape(Y, nc, 1)
+		end
+		return Y
 	end
 	r2 = SVR.r2(vy_tr[.!lpm], vy_pr[.!lpm])
 	if plot
 		Mads.plotseries([vy_tr vy_pr]; xmin=1, xmax=length(vy_pr), logy=false, names=["Truth", "Prediction"])
-		NMFk.plotscatter(vy_tr[.!pm], vy_pr[.!pm]; title="Training Size: $(sum(.!pm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
+		NMFk.plotscatter(vy_tr[.!lpm], vy_pr[.!lpm]; title="Training Size: $(sum(.!pm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 	end
 	if sum(pm) > 0 || plot
 		NMFk.plotscatter(vy_tr[lpm], vy_pr[lpm]; title="Prediction Size: $(sum(pm)); r<sup>2</sup>: $(round(r2; sigdigits=2))")
 	end
-	y_pr = reshape(vy_pr, ncases, ntimes)
-	if plottime
+	if ntimes > 0
+		y_pr = reshape(vy_pr, ncases, ntimes)
+	else
+		y_pr = reshape(vy_pr, ncases, 1)
+	end
+	if plottime && ntimes > 0
 		for i = 1:ncases
 			Mads.plotseries(permutedims([Xon[i:ncases:end,:]; y_pr[i:ncases:end,:]]); xaxis=times, xmin=0, xmax=times[emd], logy=false, names=["Truth", "Prediction"])
 		end
 	end
-	return y_pr, m, T
+	return pimlmodel, m, y_pr, T
 end
 
 function sensitivity(Xon::AbstractMatrix, Xin::AbstractMatrix, times::AbstractVector, keepcases::BitArray, attributes::AbstractVector; kw...)

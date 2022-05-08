@@ -3,174 +3,55 @@ import NMFk
 import SVR
 import Printf
 import Suppressor
+import DelimitedFiles
+import Gadfly
+import JLD
+import Statistics
 
-function mads(Xon::AbstractMatrix, Xin::AbstractMatrix, Xsn::AbstractMatrix, Xdn::AbstractArray, keepcases::BitArray, targets::AbstractVector, times::AbstractVector, Xtn::AbstractMatrix=Matrix(undef, 0, 0); obsmin::AbstractArray=Matrix(undef, 0, 0), obsmax::AbstractArray=Matrix(undef, 0, 0), case::AbstractString, control::AbstractString, filtertimes::AbstractVector=trues(length(times)), svrdir::AbstractString=joinpath(GIMI.dir, "svr"), madsdir::AbstractString=joinpath(GIMI.dir, "mads"), load::Bool=false, save::Bool=true, paramnames::Union{Nothing,AbstractVector}=nothing, obstarget::AbstractVector=targets[filtertimes], obstime::AbstractVector=times[filtertimes], mapping::Function=i->i, Xntn::AbstractMatrix=Matrix(undef, 0, 0), negpenalty::Bool=false, maxpenalty::Bool=false, parammin::AbstractArray=Vector{Float32}(undef, 0), parammax::AbstractArray=Vector{Float32}(undef, 0), input_dict::AbstractDict=Dict(), paramkey::Union{Nothing,AbstractVector}=nothing, thickness_ratio::Number=1, kw...)
-	filesvrmodel = joinpath(svrdir, "$(case)_$(control).svrmodel")
-	if load && isfile(filesvrmodel)
-		svrmodel = SVR.loadmodel(filesvrmodel)
-		if sizeof(Xtn) > 0
-			svrdata = setdata(Xin, Xsn, Xdn, [times Xtn]; control=control, mask=mask)
-		else
-			svrdata = setdata(Xin, Xsn, Xdn, times; control=control, mask=mask)
-		end
-	else
-		svrpred, svrmodel, svrdata = GIMI.model(Xon[:,filtertimes], Xin, Xsn, Xdn, log10.(times[filtertimes]), keepcases, Xtn; control=control, kernel_type=SVR.RBF)
-		if save
-			Mads.mkdir(svrdir)
-			SVR.savemodel(svrmodel, filesvrmodel)
-		end
-	end
-	nsvrparam = size(svrdata, 2) - 1
-	@info("Number of training transients: $(length(times[filtertimes]))")
-	@info("Number of SVR parameters: $nsvrparam")
-
-	function svrpredict(x::AbstractVector)
-		m = mapping(x)
-		if x == m
-			xi = [permutedims(log10.(obstime)); repeat(x, outer=(1,length(obstime)))]
-		else
-			if sizeof(Xntn) > 0
-				xi = [permutedims(log10.(obstime)); permutedims(Xntn); repeat(x, outer=(1,length(obstime))); permutedims(m)]
-			else
-				xi = [permutedims(log10.(obstime)); repeat(x, outer=(1,length(obstime))); permutedims(m)]
-			end
-		end
-		y = SVR.predict(svrmodel, xi)
-		if negpenalty
-			y[y .< 0] .= 0
-		end
-		if maxpenalty
-			for i = 2:length(y)
-				if y[i] > y[i-1]
-					y[i] = y[i-1]
-				end
-			end
-		end
-		if sizeof(obsmin) > 0
-			if length(obsmin) == length(y)
-				ii = y .> obsmax
-				y[ii] .= obsmax[ii]
-				ii = y .< obsmin
-				y[ii] .= obsmin[ii]
-			else
-				y = vec(NMFk.denormalizematrix_col!(permutedims(y), obsmin, obsmax))
-			end
-		end
-		return y ./ thickness_ratio
-	end
-
-	v = Xin[1,:]
-	m = mapping(v)
-	if v == m
-		v = vec(svrdata[1,2:end])
-		nmadsparam = length(v)
-		@info("Number of Mads parameters: $nmadsparam")
-	else
-		nmadsparam = size(m, 2) + length(v) + size(Xntn, 2)
-		@info("Number of internal Mads parameters: $nmadsparam")
-		@info("Number of external Mads parameters: $(length(v))")
-	end
-	@assert nmadsparam == nsvrparam
-
+function mads(paraminit::AbstractVector, obstarget::AbstractVector, svrmodel::SVR.svmmodel; paramkey::Union{Nothing,AbstractVector}=nothing, paramnames::Union{Nothing,AbstractVector}=nothing, parammin::AbstractArray=Vector{Float32}(undef, 0), parammax::AbstractArray=Vector{Float32}(undef, 0), obsmin::Union{Float64,AbstractArray}=Matrix(undef, 0, 0), obsmax::Union{Float64,AbstractArray}=Matrix(undef, 0, 0), obstime::Union{Nothing,AbstractVector}=nothing, case::AbstractString="case", madsdir::AbstractString=joinpath(PhysicsInformedML.dir, "mads"), kw...)
 	if paramnames === nothing
-		paramnames = ["p$i" for i=1:length(v)]
+		paramnames = ["p$i" for i=1:length(paraminit)]
 	else
-		@assert length(paramnames) == l
+		@assert length(paramnames) == length(paraminit)
+	end
+	function svrpredict(x::AbstractVector)
+		y = SVR.predict(svrmodel, x)
+		return y
 	end
 	Mads.mkdir(madsdir)
-	md = Mads.createproblem(v, obstarget, svrpredict; problemname=joinpath(madsdir, "$(case)_$(control)"), obstime=obstime, paramname=paramnames, paramkey=paramkey, kw...)
-
-	pdata, phead = DelimitedFiles.readdlm(joinpath(GIMI.dir, input_dict["dof"]["dir"], input_dict["dof"]["initials"]), ','; header=true)
-	pn = convert.(String, pdata[:,1])
-	pinit = convert.(Float32, pdata[:,2])
-	pmin = convert.(Float32, pdata[:,3])
-	pmax = convert.(Float32, pdata[:,4])
-	popt = convert.(Bool, pdata[:,5])
-	errorflag = false
-	for (i, k) = enumerate(paramkey)
-		j = indexin([k], pn)[1]
-		if j === nothing
-			@warn("Parameter name is not defined: $(paramkey[i])")
-			errorflag = true
-			continue
-		end
-		if pinit[j] < parammin[1,i] || pinit[j] > parammax[1,i]
-			@warn("Parameter $(pn[i]) initial value ($(pinit[j])) is out of bounds (min: $(parammin[1,i]) max: $(parammax[1,i]))!")
-			errorflag = true
-		end
-		if pmin[j] < parammin[1,i] || pmin[j] > parammax[1,i]
-			@warn("Parameter $(pn[j]) min value ($(pmin[j])) is out of bounds (min: $(parammin[1,i]) max: $(parammax[1,i]))!")
-			errorflag = true
-		end
-		if pmax[j] < parammin[1,i] || pmax[j] > parammax[1,i]
-			@warn("Parameter $(pn[j]) max value ($(pmax[j])) is out of bounds (min: $(parammin[1,i]) max: $(parammax[1,i]))!")
-			errorflag = true
-		end
-		if pmax[j] < pmin[j]
-			@warn("Parameter $(pn[j]) has a bound error (min: $(pmin[j]) max: $(pmax[j]))!")
-			errorflag = true
-		end
-		if popt[j] && pmin[j] == pmax[j]
-			@warn("Parameter $(pn[j]) needs to be optimized but it is constrained to be a constrant!")
-			popt[j] = false
-			errorflag = true
-		end
-		md["Parameters"][k]["init"] = pinit[j]
-		md["Parameters"][k]["min"] = pmin[j]
-		md["Parameters"][k]["max"] = pmax[j]
-		delete!(md["Parameters"][k], "dist")
-	end
-	if errorflag
-		throw("Paremeter initialization data are inaccurate!")
-		return
-	end
-
-	@info("Model parameters (original ranges):")
+	paraminitn, _ = NMFk.normalize(paraminit; amin=parammin, amax=parammax)
+	obstargetn, _ = NMFk.normalize(obstarget; amin=obsmin, amax=obsmax)
+	md = Mads.createproblem(vec(paraminitn), vec(obstargetn), svrpredict; problemname=joinpath(madsdir, "$(case)"), obstime=obstime, paramminorig=parammin, parammaxorig=parammax, obsminorig=obsmin, obsmaxorig=obsmax, kw...)
+	@info("Model parameters:")
 	Mads.showallparameters(md)
-
-	jj = indexin(paramkey, pn)
-	pinitn, _ = NMFk.normalizematrix_col(permutedims(pinit[jj]); amin=parammin, amax=parammax)
-	pminn, _ = NMFk.normalizematrix_col(permutedims(pmin[jj]); amin=parammin, amax=parammax)
-	pmaxn, _ = NMFk.normalizematrix_col(permutedims(pmax[jj]); amin=parammin, amax=parammax)
-	for (i, k) = enumerate(Mads.getparamkeys(md))
-		if k == pn[jj][i]
-			md["Parameters"][k]["init"] = pinitn[1,i]
-			md["Parameters"][k]["min"] = pminn[1,i]
-			md["Parameters"][k]["max"] = pmaxn[1,i]
-			!popt[i] && (md["Parameters"][k]["type"] = nothing)
-		else
-			@error("Parameter $(pn[i]) does not match existing parameter keys!")
-		end
-	end
-
-	@info("Model parameters (normalized ranges):")
-	Mads.showallparameters(md)
-	@info("Number of calibration targets: $(Int.(sum(Mads.getobsweight(md))))")
+	@info("Model observations:")
+	Mads.showobservations(md)
+	@info("Number of calibration targets: $(Int.(sum(Mads.getobsweight(md) .> 0)))")
 	@info("Number of total observations: $(length(obstarget))")
 	return md
 end
 
-function calibrate(aw...; random::Bool=true, reruns::Number=10, case::AbstractString="",  kw...)
+function calibrate(aw...; random::Bool=true, reruns::Number=10, case::AbstractString="case",  kw...)
 	@info("Setup the MADS problem...")
-	md = GIMI.mads(aw...; case=case, kw...)
-	pe = GIMI.calinrate(md; case=case, kw...)
+	md = PhysicsInformedML.mads(aw...; case=case, kw...)
+	pe = PhysicsInformedML.calibrate(md; case=case, kw...)
 	return md, pe
 end
 
-function calibrate(md::AbstractDict; random::Bool=true, reruns::Number=10, case::AbstractString="", kw...)
+function calibrate(md::AbstractDict; random::Bool=true, reruns::Number=10, case::AbstractString="case", kw...)
 	@info("History matching ...")
 	pe, optresults = random ? Mads.calibraterandom(md, reruns; first_init=true) : Mads.calibrate(md)
-	GIMI.calibrationresults(md, pe; case=case, kw...)
+	PhysicsInformedML.calibrationresults(md, pe; case=case, kw...)
 	return pe
 end
 
-function calibrationresults(md::AbstractDict, pe::AbstractDict; madsdir::AbstractString=joinpath(dir, "mads"), case::AbstractString="", f_calibrated_pi::AbstractString="", f_calibrated_parameters::AbstractString="", f_match::AbstractString="", parammin::AbstractArray=Vector{Float32}(undef, 0), parammax::AbstractArray=Vector{Float32}(undef, 0), plot::Bool=true)
+function calibrationresults(md::AbstractDict, pe::AbstractDict; madsdir::AbstractString=joinpath(dir, "mads"), case::AbstractString="case", f_calibrated_pi::AbstractString="", f_calibrated_parameters::AbstractString="", f_match::AbstractString="", parammin::AbstractArray=Vector{Float32}(undef, 0), parammax::AbstractArray=Vector{Float32}(undef, 0), plot::Bool=true)
 	f = Mads.forward(md, pe)
 	of = Mads.of(md, f)
 	t = Mads.getobstime(md)
 	fp = joinpath(madsdir, "$(case)")
 	@info("History matching PI estimates are saved in $(f_calibrated_pi) ...")
-	f_calibrated_pi = setfilename(f_calibrated_pi, madsdir, fp, "_calibrated_pi.csv")
+	f_calibrated_pi = setfilename(f_calibrated_pi, madsdir, fp, "_calibrated_targets.csv")
 	DelimitedFiles.writedlm(f_calibrated_pi, [t collect(values(f))], ',')
 	pmax = Mads.getparamsmax(md)
 	pmin = Mads.getparamsmin(md)
@@ -403,7 +284,7 @@ function set_input_transient_matrix(input_transient_data_keys::Base.KeySet, well
 	return input_transient_data_dof, input_transient_matrix_dof
 end
 
-function modelselection(Xo::AbstractMatrix, times::AbstractVector, pi_times::AbstractVector, pi_targets::AbstractVector, case::AbstractString, topcase::Integer=20; thickness_ratio::Number=1, madsdir::AbstractString=joinpath(GIMI.dir, "mads"), filename::AbstractString="", plot::Bool=true)
+function modelselection(Xo::AbstractMatrix, times::AbstractVector, pi_times::AbstractVector, pi_targets::AbstractVector, case::AbstractString, topcase::Integer=20; thickness_ratio::Number=1, madsdir::AbstractString=joinpath(PhysicsInformedML.dir, "mads"), filename::AbstractString="", plot::Bool=true)
 	case = case == "" ? "case" : case
 	fp = joinpath(madsdir, "$(case)")
 	filename = setfilename(filename, madsdir, fp, "_model_selection_match.png")
@@ -418,4 +299,10 @@ function modelselection(Xo::AbstractMatrix, times::AbstractVector, pi_times::Abs
 		Mads.plotseries(pi_targets, filename; xaxis=pi_times, plotline=false, pointsize=3Gadfly.pt, gl=c, title="Well $(case): Top $(topcase) models")
 	end
 	return s
+end
+
+function setfilename(fn::AbstractString, dir::AbstractString, prefix::AbstractString, suffix::AbstractString)
+	fn = fn == "" ? prefix * suffix : joinpath(dir, fn)
+	Mads.recursivemkdir(fn; filename=true)
+	return fn
 end
