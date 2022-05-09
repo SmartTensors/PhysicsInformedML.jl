@@ -116,7 +116,7 @@ function model(Xo::AbstractMatrix, Xi::AbstractMatrix, keepcases::BitArray=false
 	end
 	if plottime && ntimes > 0
 		for i = 1:ncases
-			Mads.plotseries(permutedims([Xon[i:ncases:end,:]; y_pr[i:ncases:end,:]]); xaxis=times, xmin=0, xmax=times[emd], logy=false, names=["Truth", "Prediction"])
+			Mads.plotseries(permutedims([Xon[i:ncases:end,:]; y_pr[i:ncases:end,:]]); xaxis=times, xmin=0, xmax=times[end], logy=false, names=["Truth", "Prediction"])
 		end
 	end
 	return pimlmodel, m, y_pr, T
